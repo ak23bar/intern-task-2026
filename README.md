@@ -47,16 +47,31 @@ flowchart TD
 - **JSON Response**: returns schema-conformant payload to client.
 
 ## Prompt Strategy
-The prompt is designed for deterministic structure and learner-first corrections:
-- **Minimal-edit policy** to preserve learner voice and intent.
-- **Native-language explanations** so feedback remains understandable to the learner.
-- **Strict JSON-only output requirement** to reduce parsing ambiguity.
-- **Hard constraints for allowed error types and CEFR labels**.
-- **Multilingual and non-Latin robustness** explicitly stated in rules.
-- **Compact examples only** (incorrect + correct) to reduce ambiguity without prompt bloat.
+The prompting layer combines a strict system prompt with a request-specific user prompt and a repair instruction used only when needed.
 
-This balances accuracy and token discipline: strong constraints, small context footprint.
-It is designed to produce feedback that helps the learner continue the conversation with confidence, not just mechanically satisfy grammar rules.
+### Prompt Skills
+- **Deterministic JSON discipline**: the model is instructed to return one JSON object only.
+- **Learner-safe correction behavior**: corrections are conservative and meaning-preserving.
+- **User-language explanation skill**: explanations are returned in the learner's native language, reinforced both in system rules and in the dynamic user prompt (`Use {native_language} for every explanation.`).
+- **Multilingual robustness**: prompt rules explicitly cover Latin and non-Latin scripts.
+- **Bounded repair skill**: malformed outputs are repaired once using a focused retry instruction.
+
+### Hard Rules (1-12)
+1. **JSON only**: output must be exactly one valid JSON object (no markdown, no extra prose).
+2. **Correct sentence invariant**: if input is already correct, return `is_correct=true`, `errors=[]`, and preserve the original sentence.
+3. **Minimal edits**: keep learner intent, voice, and wording unless a change is required for correctness.
+4. **Error object completeness**: each error must include `original`, `correction`, `error_type`, and `explanation`.
+5. **Explanation language constraint**: explanation must be only in the learner's native language (never in the target language).
+6. **Closed error taxonomy**: `error_type` must be one of the allowed enum values.
+7. **Closed CEFR scale**: `difficulty` must be one of `A1`, `A2`, `B1`, `B2`, `C1`, `C2`.
+8. **Difficulty policy**: difficulty reflects sentence complexity, not count of mistakes.
+9. **Script-agnostic structure**: same response structure across Latin and non-Latin writing systems.
+10. **No unnecessary rewrites**: do not alter correct phrasing/style when it is already valid.
+11. **Smallest valid correction**: when alternatives exist, choose the least invasive correction and avoid introducing new vocabulary unless needed.
+12. **Signal-over-style filtering**: include only issues that affect correctness or clarity; ignore minor stylistic preferences.
+
+### Repair Prompt
+If output is invalid, the service sends one compact repair instruction that restates the required schema and enum constraints, then validates again. This keeps reliability high without introducing unbounded retries.
 
 ## Reliability Design
 The reliability layer prioritizes low-risk, explicit control flow:
