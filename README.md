@@ -1,7 +1,5 @@
 # LLM Language Feedback API
 
-**Authored by Akbar Aman**
-
 ## One-Line Summary
 A FastAPI microservice that analyzes learner-written sentences and returns schema-safe, multilingual correction feedback using OpenAI with Anthropic fallback.
 
@@ -17,6 +15,14 @@ Response shape:
 - `is_correct`
 - `errors[]`
 - `difficulty`
+
+## Design Decisions
+- **Single-pass generation + one bounded repair retry**: enough to recover common malformed output without creating latency/cost spikes from retry loops.
+- **Low-risk validation + typed model construction**: defensive parse/field/enum checks followed by typed response construction keeps behavior explicit and maintainable without heavy validation machinery.
+- **Same-provider repair retry**: malformed content is corrected in-place instead of cross-provider correction to keep control flow predictable and easier to debug.
+- **Minimal provider abstraction**: provider routing stays simple (OpenAI primary, Anthropic fallback on call failure) to reduce code surface and operational surprises.
+- **Validated in-memory cache only**: caches only known-good structured responses, improving latency/cost while keeping the service lightweight.
+- **Reliability and clarity over feature breadth**: intentionally avoids extra subsystems so behavior remains easy to reason about in a small startup codebase.
 
 ## Architecture
 ```mermaid
@@ -50,6 +56,7 @@ The prompt is designed for deterministic structure and learner-first corrections
 - **Compact examples only** (incorrect + correct) to reduce ambiguity without prompt bloat.
 
 This balances accuracy and token discipline: strong constraints, small context footprint.
+It is designed to produce feedback that helps the learner continue the conversation with confidence, not just mechanically satisfy grammar rules.
 
 ## Reliability Design
 The reliability layer prioritizes low-risk, explicit control flow:
@@ -59,6 +66,8 @@ The reliability layer prioritizes low-risk, explicit control flow:
 - Correct-sentence invariant handling (`is_correct=true`, empty errors, corrected sentence normalized to input).
 - Clean failure behavior (`502` for invalid model format after retry, `503` for provider unavailability).
 - Malformed content does **not** trigger provider switching; repair happens in the same provider path.
+
+Concretely, this design targets high-frequency failure modes in LLM output: malformed JSON, enum drift, and overcorrection of already-correct sentences.
 
 ```mermaid
 flowchart TD
@@ -99,6 +108,7 @@ The service uses small, practical controls to keep latency and cost predictable:
 - Cache validated responses to avoid duplicate LLM calls.
 - Exactly one bounded retry (no retry storms).
 - Explicit provider call timeout (`LLM_TIMEOUT_SECONDS`, default `12`).
+- Avoids multi-call chains, large prompts, and repeated retries so per-request cost and latency stay predictable.
 
 These choices improve production feasibility without introducing operational complexity.
 
@@ -111,6 +121,7 @@ Testing is split by purpose:
 Validation philosophy:
 - Assert behavior and contracts, not brittle exact wording.
 - Cover failure paths and invariants, not only happy paths.
+- Multilingual integration checks emphasize structural correctness and plausible corrections rather than exact phrasing, because valid LLM outputs can vary.
 
 Explicitly covered edge cases:
 - Correct sentences and invariant handling.
@@ -169,3 +180,7 @@ docker compose exec feedback-api pytest tests/test_feedback_integration.py -v
 - Introduce prompt A/B tests for multilingual accuracy tuning.
 - Add request-level observability (metrics, latency histograms, error taxonomy).
 - Extend fallback policy with health-based provider routing and circuit-breaker behavior.
+
+---
+
+Authored by Akbar Aman
