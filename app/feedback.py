@@ -42,12 +42,15 @@ Hard rules:
 2) If sentence is already correct: set is_correct=true, errors=[], and corrected_sentence exactly equal to the original sentence.
 3) Use minimal edits only. Preserve learner intent, voice, and wording whenever possible.
 4) For each error include: original, correction, error_type, explanation.
-5) explanation must be written in the learner's native language.
+5) explanation must be written only in the learner's native language (never in the target language).
 6) error_type must be exactly one of:
    grammar, spelling, word_choice, punctuation, word_order, missing_word, extra_word, conjugation, gender_agreement, number_agreement, tone_register, other
 7) difficulty must be exactly one of: A1, A2, B1, B2, C1, C2.
 8) Judge difficulty by sentence complexity, not by number of mistakes.
 9) Work across all writing systems (Latin and non-Latin scripts) with the same structure.
+10) Do not change correct phrasing, word choice, or style unless it is clearly incorrect. Avoid unnecessary rewrites.
+11) If multiple corrections are possible, prefer the smallest valid correction that preserves the original meaning. Do not introduce new phrasing or vocabulary unless necessary to fix an error.
+12) Only include errors that meaningfully affect correctness or clarity. Do not flag minor stylistic differences as errors.
 
 Examples:
 Input: target_language=Spanish; native_language=English; sentence="Yo soy fue al mercado ayer."
@@ -93,7 +96,7 @@ def _build_user_message(request: FeedbackRequest) -> str:
   return (
     f"Target language: {request.target_language}\n"
     f"Native language: {request.native_language}\n"
-    f"Sentence: {request.sentence}"
+    f"Sentence: {request.sentence}\nUse {request.native_language} for every explanation."
   )
 
 
